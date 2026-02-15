@@ -44,7 +44,7 @@ authentication.
 ### Sequence Diagram
 
 ```mermaid
-%%{init: {'theme': 'default'}}%%
+%%{init: { 'theme': 'neutral' } }%%
 sequenceDiagram
     autonumber
     participant User as User (Browser)
