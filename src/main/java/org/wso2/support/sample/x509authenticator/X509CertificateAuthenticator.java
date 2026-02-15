@@ -135,14 +135,13 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     return true;
   }
 
-  /**
-   * Redirects to the error page with failure details.
-   */
+  /** Redirects to the error page with failure details. */
   private void redirectToErrorPage(
       final HttpServletResponse response, final AuthenticationContext ctx) throws IOException {
 
     final String errorPageUrl =
-        IdentityUtil.getServerURL(X509CertificateConstants.X509_CERTIFICATE_ERROR_JSP_PATH, false, false);
+        IdentityUtil.getServerURL(
+            X509CertificateConstants.X509_CERTIFICATE_ERROR_JSP_PATH, false, false);
 
     final Map<String, String> queryParams = new HashMap<>();
     queryParams.put(X509CertificateConstants.SESSION_DATA_KEY, ctx.getContextIdentifier());
@@ -150,7 +149,8 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     queryParams.put(AUTH_FAILURE_PARAM, "true");
     queryParams.put(
         ERROR_CODE_PARAM,
-        (String) ctx.getProperty(X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY));
+        (String)
+            ctx.getProperty(X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY));
 
     final String redirectUrl =
         X509CertificateUtil.buildRedirectURL(errorPageUrl, queryParams, ctx.getQueryParams());
@@ -163,9 +163,7 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     response.sendRedirect(redirectUrl);
   }
 
-  /**
-   * Redirects to authentication endpoint with session context.
-   */
+  /** Redirects to authentication endpoint with session context. */
   private void redirectToAuthEndpoint(
       final HttpServletResponse response, final AuthenticationContext ctx) throws IOException {
 
@@ -245,7 +243,8 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
       throws AuthenticationFailedException {
 
     final String userName =
-        (String) ctx.getProperty(X509CertificateConstants.X509_CERTIFICATE_USERNAME_CONTEXT_PROPERTY);
+        (String)
+            ctx.getProperty(X509CertificateConstants.X509_CERTIFICATE_USERNAME_CONTEXT_PROPERTY);
     if (StringUtils.isEmpty(userName)) {
       if (log.isDebugEnabled()) {
         log.debug("Username not found for X509Certificate's attribute.");
@@ -387,8 +386,7 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
       }
       ctx.setProperty(
           X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
-          X509CertificateConstants
-              .X509_CERTIFICATE_ALT_NAME_MULTIPLE_MATCHES_ERROR_CODE);
+          X509CertificateConstants.X509_CERTIFICATE_ALT_NAME_MULTIPLE_MATCHES_ERROR_CODE);
       throw new AuthenticationFailedException("More than one match for the given regex");
     }
     return matches.iterator().next();
@@ -442,7 +440,9 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
 
   private String getSubjectAttributePattern() {
     final String patternString =
-        getAuthenticatorConfig().getParameterMap().get(X509CertificateConstants.USER_NAME_REGEX_CONFIG_PROPERTY);
+        getAuthenticatorConfig()
+            .getParameterMap()
+            .get(X509CertificateConstants.USER_NAME_REGEX_CONFIG_PROPERTY);
     if (patternString != null) {
       if (subjectPatternCompiled == null
           || !patternString.equals(subjectPatternCompiled.pattern())) {
@@ -535,7 +535,9 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
               userName, tenantDomain, ctx, data, isSelfRegistrationEnable);
     } catch (final AuthenticationFailedException e) {
       if (StringUtils.isEmpty(
-          (String) ctx.getProperty(X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY))) {
+          (String)
+              ctx.getProperty(
+                  X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY))) {
         ctx.setProperty(
             X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
             X509CertificateConstants.X509_CERTIFICATE_NOT_VALIDATED_ERROR_CODE);
@@ -548,7 +550,9 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
         log.debug("X509 certificate validation failed.");
       }
       if (StringUtils.isEmpty(
-          (String) ctx.getProperty(X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY))) {
+          (String)
+              ctx.getProperty(
+                  X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY))) {
         ctx.setProperty(
             X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
             X509CertificateConstants.X509_CERTIFICATE_NOT_VALID_ERROR_CODE);
@@ -563,7 +567,8 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
 
     try {
       // Check whether the user account is disabled or not.
-      final AuthenticatedUser userToCheck = createAuthenticatedUser(qualifiedUserName, tenantDomain);
+      final AuthenticatedUser userToCheck =
+          createAuthenticatedUser(qualifiedUserName, tenantDomain);
 
       // Check whether the user account is locked or not.
       if (X509CertificateUtil.isAccountLocked(userToCheck)) {
@@ -630,7 +635,8 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
           log.debug("Setting X509Certificate username attribute: " + userNameAttribute);
         }
         ctx.setProperty(
-            X509CertificateConstants.X509_CERTIFICATE_USERNAME_CONTEXT_PROPERTY, String.valueOf(rdn.getValue()));
+            X509CertificateConstants.X509_CERTIFICATE_USERNAME_CONTEXT_PROPERTY,
+            String.valueOf(rdn.getValue()));
       }
     }
     return claims;
@@ -643,12 +649,11 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
       final AuthenticationContext ctx) {
 
     final String tenantDomain =
-            StringUtils.isNotBlank(ctx.getTenantDomain())
-                    ? ctx.getTenantDomain()
-                    : X509CertificateConstants.SUPER_TENANT_DOMAIN_NAME;
+        StringUtils.isNotBlank(ctx.getTenantDomain())
+            ? ctx.getTenantDomain()
+            : X509CertificateConstants.SUPER_TENANT_DOMAIN_NAME;
 
     final AuthenticatedUser authenticatedUserObj = createAuthenticatedUser(userName, tenantDomain);
-
 
     authenticatedUserObj.setAuthenticatedSubjectIdentifier(String.valueOf(cert.getSerialNumber()));
     authenticatedUserObj.setUserAttributes(claims);
@@ -680,8 +685,10 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
   }
 
-  protected AuthenticatedUser createAuthenticatedUser(final String userName, final String tenantDomain) {
-    final AuthenticatedUser authUser = AuthenticatedUser.createLocalAuthenticatedUserFromSubjectIdentifier(userName);
+  protected AuthenticatedUser createAuthenticatedUser(
+      final String userName, final String tenantDomain) {
+    final AuthenticatedUser authUser =
+        AuthenticatedUser.createLocalAuthenticatedUserFromSubjectIdentifier(userName);
     authUser.setTenantDomain(tenantDomain);
 
     return authUser;

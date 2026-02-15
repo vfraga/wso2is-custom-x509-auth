@@ -42,7 +42,18 @@ import org.wso2.support.sample.x509authenticator.internal.ServiceHolder;
   AbstractUserStoreManager.class,
   CertificateFactory.class
 })
-@PowerMockIgnore({"javax.management.*", "javax.net.ssl.*", "javax.security.*", "javax.xml.*", "jdk.internal.reflect.*", "org.apache.logging.log4j.*", "com.sun.org.apache.xerces.*", "org.apache.xerces.*", "org.w3c.dom.*", "org.xml.sax.*"})
+@PowerMockIgnore({
+  "javax.management.*",
+  "javax.net.ssl.*",
+  "javax.security.*",
+  "javax.xml.*",
+  "jdk.internal.reflect.*",
+  "org.apache.logging.log4j.*",
+  "com.sun.org.apache.xerces.*",
+  "org.apache.xerces.*",
+  "org.w3c.dom.*",
+  "org.xml.sax.*"
+})
 public class X509CertificateUtilTest {
 
   @ObjectFactory

@@ -41,7 +41,18 @@ import org.wso2.carbon.identity.core.util.IdentityUtil;
   FrameworkUtils.class,
   IdentityUtil.class
 })
-@PowerMockIgnore({"javax.management.*", "javax.net.ssl.*", "javax.security.*", "javax.xml.*", "jdk.internal.reflect.*", "org.apache.logging.log4j.*", "com.sun.org.apache.xerces.*", "org.apache.xerces.*", "org.w3c.dom.*", "org.xml.sax.*"})
+@PowerMockIgnore({
+  "javax.management.*",
+  "javax.net.ssl.*",
+  "javax.security.*",
+  "javax.xml.*",
+  "jdk.internal.reflect.*",
+  "org.apache.logging.log4j.*",
+  "com.sun.org.apache.xerces.*",
+  "org.apache.xerces.*",
+  "org.w3c.dom.*",
+  "org.xml.sax.*"
+})
 public class X509CertificateAuthenticatorTest {
 
   private static final String CERT_WITH_NO_ALT_NAMES =
