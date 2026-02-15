@@ -1,8 +1,8 @@
 package org.wso2.support.sample.x509authenticator;
 
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyBoolean;
-import static org.mockito.Matchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.powermock.api.mockito.PowerMockito.*;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.fail;
@@ -16,7 +16,7 @@ import javax.security.auth.x500.X500Principal;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.xml.bind.DatatypeConverter;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
@@ -41,7 +41,7 @@ import org.wso2.carbon.identity.core.util.IdentityUtil;
   FrameworkUtils.class,
   IdentityUtil.class
 })
-@PowerMockIgnore({"javax.xml.*", "javax.security.*"})
+@PowerMockIgnore({"javax.management.*", "javax.net.ssl.*", "javax.security.*", "javax.xml.*", "jdk.internal.reflect.*", "org.apache.logging.log4j.*", "com.sun.org.apache.xerces.*", "org.apache.xerces.*", "org.w3c.dom.*", "org.xml.sax.*"})
 public class X509CertificateAuthenticatorTest {
 
   private static final String CERT_WITH_NO_ALT_NAMES =
@@ -368,17 +368,19 @@ public class X509CertificateAuthenticatorTest {
     authenticatedUser.setUserName("test-user");
     doReturn(authenticatedUser).when(spy, "createAuthenticatedUser", anyString(), anyString());
     mockStatic(X509CertificateUtil.class);
+    when(X509CertificateUtil.getUserStoreDomainName(anyString(), anyString(), any()))
+        .thenReturn("PRIMARY");
     when(X509CertificateUtil.validateCertificate(
-            Matchers.anyString(),
-            Matchers.anyString(),
-            Matchers.any(AuthenticationContext.class),
+            ArgumentMatchers.anyString(),
+            ArgumentMatchers.anyString(),
+            ArgumentMatchers.any(AuthenticationContext.class),
             any(byte[].class),
-            Matchers.anyBoolean()))
+            ArgumentMatchers.anyBoolean()))
         .thenReturn(true);
     mockStatic(IdentityUtil.class);
-    when(X509CertificateUtil.isAccountLocked(Matchers.any(AuthenticatedUser.class)))
+    when(X509CertificateUtil.isAccountLocked(ArgumentMatchers.any(AuthenticatedUser.class)))
         .thenReturn(false);
-    when(X509CertificateUtil.isAccountDisabled(Matchers.any(AuthenticatedUser.class)))
+    when(X509CertificateUtil.isAccountDisabled(ArgumentMatchers.any(AuthenticatedUser.class)))
         .thenReturn(false);
     when(IdentityUtil.getPrimaryDomainName()).thenReturn("PRIMARY");
 

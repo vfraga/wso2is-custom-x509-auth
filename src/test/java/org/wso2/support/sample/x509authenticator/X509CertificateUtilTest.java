@@ -1,8 +1,8 @@
 package org.wso2.support.sample.x509authenticator;
 
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyInt;
-import static org.mockito.Matchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.powermock.api.mockito.PowerMockito.mock;
 import static org.powermock.api.mockito.PowerMockito.mockStatic;
 import static org.powermock.api.mockito.PowerMockito.when;
@@ -16,7 +16,7 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.Map;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
@@ -42,7 +42,7 @@ import org.wso2.support.sample.x509authenticator.internal.ServiceHolder;
   AbstractUserStoreManager.class,
   CertificateFactory.class
 })
-@PowerMockIgnore({"javax.security.*", "javax.xml.*"})
+@PowerMockIgnore({"javax.management.*", "javax.net.ssl.*", "javax.security.*", "javax.xml.*", "jdk.internal.reflect.*", "org.apache.logging.log4j.*", "com.sun.org.apache.xerces.*", "org.apache.xerces.*", "org.w3c.dom.*", "org.xml.sax.*"})
 public class X509CertificateUtilTest {
 
   @ObjectFactory
@@ -125,7 +125,7 @@ public class X509CertificateUtilTest {
         (AbstractUserStoreManager) mockUserRealm.getUserStoreManager();
 
     when(mockUserStoreManager.listUsers(anyString(), anyInt())).thenReturn(new String[0]);
-    when(mockUserStoreManager.getUserList(anyString(), anyString(), Matchers.any()))
+    when(mockUserStoreManager.getUserList(anyString(), anyString(), ArgumentMatchers.any()))
         .thenReturn(new String[0]);
 
     String result =

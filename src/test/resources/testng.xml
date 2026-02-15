@@ -4,6 +4,7 @@
     <test name="x509AuthenticatorTestsWithDebugEnabled" preserve-order="false" parallel="false">
         <classes>
             <class name="org.wso2.support.sample.x509authenticator.X509CertificateAuthenticatorTest"/>
+            <class name="org.wso2.support.sample.x509authenticator.X509CertificateUtilTest"/>
         </classes>
     </test>
 </suite>
