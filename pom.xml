@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.wso2.support.sample.x509authenticator</groupId>
+    <artifactId>custom-auth-x509</artifactId>
+    <version>0.1-SNAPSHOT</version>
+
+    <packaging>bundle</packaging>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>wso2-maven2-repository</id>
+            <url>https://dist.wso2.org/maven2</url>
+        </pluginRepository>
+    </pluginRepositories>
+
+    <repositories>
+        <repository>
+            <id>wso2-public</id>
+            <name>WSO2 Public Repository</name>
+            <url>https://maven.wso2.org/nexus/content/groups/wso2-public/</url>
+            <releases>
+                <enabled>true</enabled>
+                <updatePolicy>daily</updatePolicy>
+                <checksumPolicy>ignore</checksumPolicy>
+            </releases>
+        </repository>
+        <repository>
+            <id>wso2-releases</id>
+            <name>WSO2 Releases Repository</name>
+            <url>https://maven.wso2.org/nexus/content/repositories/releases/</url>
+            <releases>
+                <enabled>true</enabled>
+                <updatePolicy>daily</updatePolicy>
+                <checksumPolicy>ignore</checksumPolicy>
+            </releases>
+        </repository>
+        <repository>
+            <id>wso2-snapshots</id>
+            <name>WSO2 Snapshot Repository</name>
+            <url>https://maven.wso2.org/nexus/content/repositories/snapshots/</url>
+            <snapshots>
+                <enabled>true</enabled>
+                <updatePolicy>daily</updatePolicy>
+            </snapshots>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+        </repository>
+        <repository>
+            <id>wso2-maven2-repository</id>
+            <url>https://dist.wso2.org/maven2</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <dependency>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+            <version>${commons-logging.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.identity.framework</groupId>
+            <artifactId>org.wso2.carbon.identity.application.authentication.framework</artifactId>
+            <version>${carbon.identity.framework.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.felix</groupId>
+            <artifactId>org.apache.felix.scr.ds-annotations</artifactId>
+            <version>${apache.felix.scr.ds.annotations.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.identity.framework</groupId>
+            <artifactId>org.wso2.carbon.identity.core</artifactId>
+            <version>${carbon.identity.framework.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.extension.identity.x509certificate</groupId>
+            <artifactId>org.wso2.carbon.extension.identity.x509Certificate.validation</artifactId>
+            <version>${identity.x509Certificate.validation.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.identity.event.handler.accountlock</groupId>
+            <artifactId>org.wso2.carbon.identity.handler.event.account.lock</artifactId>
+            <version>${identity.account.handler.lock.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+            <scope>test</scope>
+            <version>${testng.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.powermock</groupId>
+            <artifactId>powermock-module-testng</artifactId>
+            <scope>test</scope>
+            <version>${org.powermock.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.powermock</groupId>
+            <artifactId>powermock-api-mockito</artifactId>
+            <scope>test</scope>
+            <version>${org.powermock.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jacoco</groupId>
+            <artifactId>org.jacoco.agent</artifactId>
+            <classifier>runtime</classifier>
+            <scope>test</scope>
+            <version>${jacoco.version}</version>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>maven-scr-plugin</artifactId>
+                <version>1.26.4</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>maven-bundle-plugin</artifactId>
+                <version>3.2.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <instructions>
+                        <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
+                        <Bundle-Name>${project.artifactId}</Bundle-Name>
+                        <Private-Package>
+                            org.wso2.support.sample.x509authenticator.internal
+                        </Private-Package>
+                        <Export-Package>
+                            !org.wso2.support.sample.x509authenticator.internal,
+                            org.wso2.support.sample.x509authenticator.*,
+                        </Export-Package>
+                        <Import-Package>
+                            javax.servlet.*; version="${javax.servlet.version.range}",
+                            javax.naming.*,
+
+                            org.osgi.framework.*;version="${osgi.framework.version.range}",
+                            org.osgi.service.component.*;version="${osgi.service.component.version.range}",
+
+                            org.slf4j; version="${org.slf4j.version.range}",
+                            org.apache.commons.logging.*; version="${commons-logging.osgi.version.range}",
+                            org.apache.commons.lang.*; version="${commons-lang.wso2.osgi.version.range}",
+                            org.apache.commons.ssl.*; version="${commons-http.wso2.osgi.version.range}",
+
+                            org.wso2.carbon.identity.core.*; version="${carbon.identity.framework.version.range}",
+
+                            org.wso2.carbon.identity.application.*;
+                            version="${carbon.identity.framework.version.range}",
+
+                            org.wso2.carbon.identity.handler.event.account.lock.*;
+                            version="${identity.account.handler.lock.version.range}",
+                            org.wso2.carbon.identity.x509Certificate.validation.*;
+                            version="${identity.x509Certificate.validation.version.range}",
+
+                            org.wso2.carbon.user.core.*; version="${carbon.kernel.version.range}",
+                            org.wso2.carbon.user.api.*; version="${carbon.user.api.version.range}",
+                            org.wso2.carbon.utils.*; version="${carbon.kernel.version.range}",
+                            org.wso2.carbon.context; version="${carbon.kernel.version.range}"
+                        </Import-Package>
+                    </instructions>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${maven.surefire.plugin.version}</version>
+                <configuration>
+                    <suiteXmlFiles>
+                        <suiteXmlFile>src/test/resources/testng.xml</suiteXmlFile>
+                    </suiteXmlFiles>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+    <properties>
+        <!--
+            NOTE:
+            Reference for the correct WSO2 IS component versions can be found in the `product-is` repo's `pom.xml` file,
+            though you still need to change the tag to be your product version.
+
+            Example: https://github.com/wso2/product-is/blob/v5.10.0/pom.xml)
+        -->
+
+        <!-- Maven project properties -->
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+
+        <maven.surefire.plugin.version>2.18.1</maven.surefire.plugin.version>
+
+        <!--Carbon Kernel Version-->
+        <carbon.kernel.version>4.6.0</carbon.kernel.version>
+
+        <carbon.kernel.version.range>[4.6.0, 5.0.0)</carbon.kernel.version.range>
+        <carbon.user.api.version.range>[1.0.1, 2.0.0)</carbon.user.api.version.range>
+
+        <!--Carbon Identity Framework-->
+        <carbon.identity.framework.version>5.17.5</carbon.identity.framework.version>
+
+        <carbon.identity.framework.version.range>[5.17.5, 8.0.0)</carbon.identity.framework.version.range>
+
+        <!-- Identity Helpers -->
+        <identity.account.handler.lock.version>1.4.0</identity.account.handler.lock.version>
+        <identity.x509Certificate.validation.version>1.0.6</identity.x509Certificate.validation.version>
+
+        <identity.account.handler.lock.version.range>[1.4.0, 2.0.0)</identity.account.handler.lock.version.range>
+        <identity.x509Certificate.validation.version.range>[1.0.1, 2.0.0)
+        </identity.x509Certificate.validation.version.range>
+
+        <!-- Common versions -->
+        <apache.felix.scr.ds.annotations.version>1.2.10</apache.felix.scr.ds.annotations.version>
+        <commons-logging.version>1.2</commons-logging.version>
+
+        <osgi.framework.version.range>[1.7.0, 2.0.0)</osgi.framework.version.range>
+        <osgi.service.component.version.range>[1.2.0, 2.0.0)</osgi.service.component.version.range>
+
+        <org.slf4j.version.range>[1.6.1, 2.0.0)</org.slf4j.version.range>
+        <javax.servlet.version.range>[2.6.0, 3.0.0)</javax.servlet.version.range>
+
+        <commons-lang.wso2.osgi.version.range>[2.6.0, 3.0.0)</commons-lang.wso2.osgi.version.range>
+        <commons-logging.osgi.version.range>[1.2, 2.0)</commons-logging.osgi.version.range>
+        <commons-http.wso2.osgi.version.range>[3.0, 4.0)</commons-http.wso2.osgi.version.range>
+
+        <!-- Test lib versions -->
+        <testng.version>6.9.10</testng.version>
+        <org.powermock.version>1.7.4</org.powermock.version>
+        <jacoco.version>0.7.9</jacoco.version>
+    </properties>
+</project>
