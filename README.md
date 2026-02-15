@@ -211,7 +211,7 @@ For the authenticator to perform revocation checks (CRL/OCSP), the Certificate A
 the WSO2 Registry.
 
 1. **Prepare Certificates:** Ensure you have your Root CA and Intermediate CA PEM files.
-2. **Determine Registry Paths:** Use the `cert-path-tool` to generate the correct normalized registry path for your CAs.
+2. **Determine Registry Paths:** Use the [`cert-path-tool`](https://github.com/vfraga/wso2is-x509-cacert-registry-path-tool) to generate the correct normalized registry path for your CAs.
 
 ```bash
 java -jar cert-path-tool-1.0.0.jar -f /path/to/root-ca.pem -s
