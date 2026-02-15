@@ -1,8 +1,7 @@
 # Custom X509 Certificate Authenticator for WSO2 Identity Server
 
 This repository contains a sample **X509 Certificate Authenticator** for WSO2 Identity Server (IS) 5.10.0. It
-enables robust mutual TLS (mTLS) authentication flows, supporting both **SSL Termination** (at a Load Balancer) and *
-*SSL Passthrough** (direct to WSO2 IS).
+enables robust mutual TLS (mTLS) authentication flows, supporting both **SSL Termination** (at a Load Balancer) and **SSL Passthrough** (direct to WSO2 IS).
 
 ## Features
 
