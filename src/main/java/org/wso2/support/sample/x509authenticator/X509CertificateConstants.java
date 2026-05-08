@@ -55,6 +55,9 @@ public final class X509CertificateConstants {
   public static final String X509_CERTIFICATE_SUBJECT_DN_MULTIPLE_MATCHES_ERROR_CODE = "17006";
   public static final String X509_CERTIFICATE_SUBJECT_DN_REGEX_NO_MATCHES_ERROR_CODE = "17007";
 
+  public static final String AUTH_FAILURE_PARAM = "authFailure";
+  public static final String ERROR_CODE_PARAM = "errorCode";
+
   public static final String X509_CERTIFICATE_ALTERNATIVE_NAMES_NOTFOUND_ERROR =
       "Regex Configured but no alternative names in the certificate";
   public static final String X509_CERTIFICATE_SUBJECT_DN_REGEX_NO_MATCHES_ERROR =

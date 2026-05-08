@@ -113,3 +113,8 @@ build/
 # Misc
 # ===============================
 .kotlin
+
+.desloppify/*
+.claude/*
+.sisyphus/*
+.mvn/*

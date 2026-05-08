@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -13,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import javax.naming.InvalidNameException;
 import javax.naming.ldap.LdapName;
 import javax.naming.ldap.Rdn;
@@ -26,7 +26,6 @@ import org.apache.commons.ssl.asn1.DEREncodable;
 import org.apache.commons.ssl.asn1.DERSequence;
 import org.apache.commons.ssl.asn1.DERTaggedObject;
 import org.apache.commons.ssl.asn1.DERUTF8String;
-
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.application.authentication.framework.AbstractApplicationAuthenticator;
 import org.wso2.carbon.identity.application.authentication.framework.LocalApplicationAuthenticator;
@@ -45,8 +44,6 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     implements LocalApplicationAuthenticator {
 
   private static final Log log = LogFactory.getLog(X509CertificateAuthenticator.class);
-  private static final String AUTH_FAILURE_PARAM = "authFailure";
-  private static final String ERROR_CODE_PARAM = "errorCode";
 
   private volatile Pattern alternativeNamesPatternCompiled;
   private volatile Pattern subjectPatternCompiled;
@@ -87,9 +84,9 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     if (alternativeNamePattern != null) {
       final String alternativeName = getMatchedAlternativeName(cert, authenticationContext);
 
-      if (log.isDebugEnabled()) {
-        log.debug("Validating certificate using the alternative name: " + alternativeNamePattern);
-      }
+      log.debug("Validating certificate using the alternative name: " + alternativeNamePattern);
+      log.info("Using Alternative Name resolution (AlternativeNamesRegex: "
+          + alternativeNamePattern + ")");
 
       validateAndSetUsername(alternativeName, authenticationContext, cert, claims);
     } else {
@@ -97,14 +94,17 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
       if (subjectAttributePattern != null) {
         final String subjectAttribute =
             getMatchedSubjectAttribute(certAttributes, authenticationContext);
-        if (log.isDebugEnabled()) {
-          log.debug(
-              "Validating certificate using the certificate subject attribute: "
-                  + subjectAttributePattern);
-        }
+        log.debug(
+            "Validating certificate using the certificate subject attribute: "
+                + subjectAttributePattern);
+        final String usernameAttr =
+            getAuthenticatorConfig().getParameterMap().get(X509CertificateConstants.USERNAME);
+        log.info("Using Subject DN regex resolution (UsernameRegex: " + subjectAttributePattern
+            + ", username attribute: " + usernameAttr + ")");
 
         validateAndSetUsername(subjectAttribute, authenticationContext, cert, claims);
       } else {
+        log.info("Using fallback username resolution (no regex configured)");
         handleFallbackUsername(authenticationContext, cert, claims);
       }
     }
@@ -132,7 +132,9 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
 
   @Override
   protected boolean retryAuthenticationEnabled() {
-    return true;
+    // X509 certificate authentication should not retry — the browser's certificate
+    // is presented once during TLS handshake
+    return false;
   }
 
   /** Redirects to the error page with failure details. */
@@ -146,20 +148,18 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     final Map<String, String> queryParams = new HashMap<>();
     queryParams.put(X509CertificateConstants.SESSION_DATA_KEY, ctx.getContextIdentifier());
     queryParams.put(X509CertificateConstants.AUTHENTICATORS, getName());
-    queryParams.put(AUTH_FAILURE_PARAM, "true");
-    queryParams.put(
-        ERROR_CODE_PARAM,
-        (String)
-            ctx.getProperty(X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY));
+    queryParams.put(X509CertificateConstants.AUTH_FAILURE_PARAM, "true");
+    final Object errorCodeObj =
+        ctx.getProperty(X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY);
+    final String errorCode = errorCodeObj instanceof String ? (String) errorCodeObj : "";
+    queryParams.put(X509CertificateConstants.ERROR_CODE_PARAM, errorCode);
 
     final String redirectUrl =
         X509CertificateUtil.buildRedirectURL(errorPageUrl, queryParams, ctx.getQueryParams());
 
     ctx.setProperty(X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY, "");
 
-    if (log.isDebugEnabled()) {
-      log.debug("Redirect to error page: " + redirectUrl);
-    }
+    log.debug("Redirect to error page: " + redirectUrl);
     response.sendRedirect(redirectUrl);
   }
 
@@ -173,6 +173,9 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
             .get(X509CertificateConstants.AUTHENTICATION_ENDPOINT_CONFIG_PROPERTY);
     if (StringUtils.isEmpty(authEndpoint)) {
       authEndpoint = X509CertificateConstants.X509_CERTIFICATE_SERVLET_URL;
+      log.warn("AuthenticationEndpoint not configured. Using default: " + authEndpoint);
+    } else {
+      log.info("Authentication endpoint configured: " + authEndpoint);
     }
 
     final Map<String, String> queryParams = new HashMap<>();
@@ -185,9 +188,7 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     final String redirectUrl =
         X509CertificateUtil.buildRedirectURL(authEndpoint, queryParams, ctx.getQueryParams());
 
-    if (log.isDebugEnabled()) {
-      log.debug("Request sent to " + authEndpoint);
-    }
+    log.info("Redirecting to authentication endpoint: " + authEndpoint);
 
     response.sendRedirect(redirectUrl);
   }
@@ -202,9 +203,7 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
       object = request.getAttribute(X509CertificateConstants.X_509_CERTIFICATE);
     }
     if (object == null) {
-      if (log.isDebugEnabled()) {
-        log.debug("X509 certificate not found in the request or context.");
-      }
+      log.debug("X509 certificate not found in the request or context.");
       ctx.setProperty(
           X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
           X509CertificateConstants.X509_CERTIFICATE_NOT_FOUND_ERROR_CODE);
@@ -219,8 +218,12 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
       throw new AuthenticationFailedException("X509Certificate object is null");
     }
 
-    if (log.isDebugEnabled()) {
-      log.debug("X509 Certificate Checking in servlet is done!");
+    log.debug("X509 Certificate Checking in servlet is done!");
+    if (log.isInfoEnabled()) {
+      log.info("X509 certificate extracted successfully. Serial="
+          + certificates[0].getSerialNumber()
+          + ", Issuer=" + certificates[0].getIssuerX500Principal()
+          + ", Subject=" + certificates[0].getSubjectX500Principal());
     }
     return certificates[0];
   }
@@ -242,13 +245,11 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
       final Map<ClaimMapping, String> claims)
       throws AuthenticationFailedException {
 
-    final String userName =
-        (String)
-            ctx.getProperty(X509CertificateConstants.X509_CERTIFICATE_USERNAME_CONTEXT_PROPERTY);
+    final Object userNameObj =
+        ctx.getProperty(X509CertificateConstants.X509_CERTIFICATE_USERNAME_CONTEXT_PROPERTY);
+    final String userName = userNameObj instanceof String ? (String) userNameObj : null;
     if (StringUtils.isEmpty(userName)) {
-      if (log.isDebugEnabled()) {
-        log.debug("Username not found for X509Certificate's attribute.");
-      }
+      log.debug("Username not found for X509Certificate's attribute.");
 
       ctx.setProperty(
           X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
@@ -257,10 +258,8 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
           "Couldn't find the username for X509Certificate's attribute");
     }
     validateUsingSubject(userName, ctx, cert, claims);
-    if (log.isDebugEnabled()) {
-      // Do not log the username value to avoid exposing user data.
-      log.debug("Certificate validated using the certificate username attribute.");
-    }
+    // Do not log the username value to avoid exposing user data.
+    log.debug("Certificate validated using the certificate username attribute.");
   }
 
   /**
@@ -274,14 +273,25 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     final String userNameAttribute =
         getAuthenticatorConfig().getParameterMap().get(X509CertificateConstants.USERNAME);
     final Set<String> matches = new HashSet<>();
+    int matchingRdnCount = 0;
+
+    log.debug("Searching Subject DN for RDN type '" + userNameAttribute + "'");
 
     final Pattern pattern = getSubjectPattern();
     for (final Rdn rdn : ldapDN.getRdns()) {
-      // Extracts matching username from certificate attributes
       if (pattern != null && userNameAttribute.equals(rdn.getType())) {
+        matchingRdnCount++;
         final Matcher m = pattern.matcher(String.valueOf(rdn.getValue()));
         addMatchStringsToList(m, matches);
       }
+    }
+
+    if (matchingRdnCount == 0 && StringUtils.isNotEmpty(userNameAttribute)) {
+      log.warn("No RDN of type '" + userNameAttribute
+          + "' found in certificate Subject DN — check the 'username' configuration property");
+    } else {
+      log.debug("Found " + matchingRdnCount + " RDN(s) of type '" + userNameAttribute
+          + "' in certificate; applying UsernameRegex");
     }
 
     return resolveSingleMatch(matches, ctx, userNameAttribute);
@@ -296,9 +306,7 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     try {
       final Collection<List<?>> altNames = cert.getSubjectAlternativeNames();
       if (altNames == null) {
-        if (log.isDebugEnabled()) {
-          log.debug("Subject Alternative Names not found in the certificate.");
-        }
+        log.debug("Subject Alternative Names not found in the certificate.");
         ctx.setProperty(
             X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
             X509CertificateConstants.X509_CERTIFICATE_ALT_NAME_NOT_FOUND_ERROR_CODE);
@@ -306,7 +314,13 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
             X509CertificateConstants.X509_CERTIFICATE_ALTERNATIVE_NAMES_NOTFOUND_ERROR);
       }
 
+      log.debug("Found " + altNames.size()
+          + " Subject Alternative Name entries in certificate");
+
       final Pattern pattern = getAlternativeNamesPattern();
+      if (pattern != null) {
+        log.debug("Applying AlternativeNamesRegex against " + altNames.size() + " SAN entries");
+      }
       for (final List<?> item : altNames) {
         final Object value = item.get(1);
         if (value instanceof byte[]) {
@@ -339,9 +353,7 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
       ctx.setProperty(
           X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
           X509CertificateConstants.X509_CERTIFICATE_SUBJECT_DN_REGEX_NO_MATCHES_ERROR_CODE);
-      if (log.isDebugEnabled()) {
-        log.debug(X509CertificateConstants.X509_CERTIFICATE_SUBJECT_DN_REGEX_NO_MATCHES_ERROR);
-      }
+      log.debug(X509CertificateConstants.X509_CERTIFICATE_SUBJECT_DN_REGEX_NO_MATCHES_ERROR);
       throw new AuthenticationFailedException(
           X509CertificateConstants.X509_CERTIFICATE_SUBJECT_DN_REGEX_NO_MATCHES_ERROR);
     }
@@ -349,19 +361,14 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
       ctx.setProperty(
           X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
           X509CertificateConstants.X509_CERTIFICATE_SUBJECT_DN_MULTIPLE_MATCHES_ERROR_CODE);
-      if (log.isDebugEnabled()) {
-        log.debug(
-            "More than one value matched with the given regex, matches: "
-                + Arrays.toString(matches.toArray()));
-      }
+      log.debug(
+          "More than one value matched with the given regex (count: " + matches.size() + ")");
       throw new AuthenticationFailedException("More than one value matched with the given regex");
     }
 
     final String matched = matches.iterator().next();
-    if (log.isDebugEnabled()) {
-      // Intentionally not logging the matched attribute value.
-      log.debug("Setting X509Certificate username attribute: " + userNameAttribute + ".");
-    }
+    // Intentionally not logging the matched attribute value.
+    log.debug("Setting X509Certificate username attribute: " + userNameAttribute + ".");
     ctx.setProperty(X509CertificateConstants.X509_CERTIFICATE_USERNAME_CONTEXT_PROPERTY, matched);
     return matched;
   }
@@ -371,9 +378,7 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
       throws AuthenticationFailedException {
 
     if (matches.isEmpty()) {
-      if (log.isDebugEnabled()) {
-        log.debug("Regex configured for Alternative Names but no matches found.");
-      }
+      log.debug("AlternativeNamesRegex did not match any SAN entry");
       ctx.setProperty(
           X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
           X509CertificateConstants.X509_CERTIFICATE_ALT_NAME_NO_MATCHES_ERROR_CODE);
@@ -381,9 +386,7 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
           "Regex Configured but no matches found for the given regex");
     }
     if (matches.size() > 1) {
-      if (log.isDebugEnabled()) {
-        log.debug("More than one match found for Alternative Names with the configured regex.");
-      }
+      log.debug("More than one match found for Alternative Names with the configured regex.");
       ctx.setProperty(
           X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
           X509CertificateConstants.X509_CERTIFICATE_ALT_NAME_MULTIPLE_MATCHES_ERROR_CODE);
@@ -423,9 +426,18 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
             .getParameterMap()
             .get(X509CertificateConstants.ALTERNATIVE_NAMES_REGEX_CONFIG_PROPERTY);
     if (patternString != null) {
-      if (alternativeNamesPatternCompiled == null
-          || !patternString.equals(alternativeNamesPatternCompiled.pattern())) {
-        alternativeNamesPatternCompiled = Pattern.compile(patternString);
+      Pattern result = alternativeNamesPatternCompiled;
+      if (result == null
+          || !patternString.equals(result.pattern())) {
+        try {
+          result = Pattern.compile(patternString);
+          alternativeNamesPatternCompiled = result;
+        } catch (final PatternSyntaxException e) {
+          log.error("Invalid regex pattern configured for AlternativeNamesRegex: '"
+              + patternString + "'. " + e.getMessage());
+          alternativeNamesPatternCompiled = null;
+          return null;
+        }
       }
     } else {
       alternativeNamesPatternCompiled = null;
@@ -444,9 +456,18 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
             .getParameterMap()
             .get(X509CertificateConstants.USER_NAME_REGEX_CONFIG_PROPERTY);
     if (patternString != null) {
-      if (subjectPatternCompiled == null
-          || !patternString.equals(subjectPatternCompiled.pattern())) {
-        subjectPatternCompiled = Pattern.compile(patternString);
+      Pattern result = subjectPatternCompiled;
+      if (result == null
+          || !patternString.equals(result.pattern())) {
+        try {
+          result = Pattern.compile(patternString);
+          subjectPatternCompiled = result;
+        } catch (final PatternSyntaxException e) {
+          log.error("Invalid regex pattern configured for UsernameRegex: '"
+              + patternString + "'. " + e.getMessage());
+          subjectPatternCompiled = null;
+          return null;
+        }
       }
     } else {
       subjectPatternCompiled = null;
@@ -481,17 +502,13 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
       return;
     }
 
-    if (log.isDebugEnabled()) {
-      // Avoid logging potentially sensitive username data.
-      log.debug("Authenticated user found from previous steps.");
-    }
+    // Avoid logging potentially sensitive username data.
+    log.debug("Authenticated user found from previous steps.");
     final AuthenticatedUser tempUser = createAuthenticatedUser(identifier, tenantDomain);
 
     if (!authenticatedUser.equals(tempUser)) {
-      if (log.isDebugEnabled()) {
-        log.debug(
-            "User conflict: the certificate does not belong to the currently authenticated user.");
-      }
+      log.debug(
+          "User conflict: the certificate does not belong to the currently authenticated user.");
       ctx.setProperty(
           X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
           X509CertificateConstants.USERNAME_CONFLICT);
@@ -528,16 +545,18 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
                 .getParameterMap()
                 .get(X509CertificateConstants.ENFORCE_SELF_REGISTRATION_CONFIG_PROPERTY));
 
+    log.debug("EnforceSelfRegistration = " + isSelfRegistrationEnable);
+
     final boolean isUserCertValid;
     try {
       isUserCertValid =
           X509CertificateUtil.validateCertificate(
               userName, tenantDomain, ctx, data, isSelfRegistrationEnable);
     } catch (final AuthenticationFailedException e) {
-      if (StringUtils.isEmpty(
-          (String)
-              ctx.getProperty(
-                  X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY))) {
+      final Object errorCodeObj1 =
+          ctx.getProperty(X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY);
+      final String errorCode1 = errorCodeObj1 instanceof String ? (String) errorCodeObj1 : null;
+      if (StringUtils.isEmpty(errorCode1)) {
         ctx.setProperty(
             X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
             X509CertificateConstants.X509_CERTIFICATE_NOT_VALIDATED_ERROR_CODE);
@@ -546,13 +565,11 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     }
 
     if (!isUserCertValid) {
-      if (log.isDebugEnabled()) {
-        log.debug("X509 certificate validation failed.");
-      }
-      if (StringUtils.isEmpty(
-          (String)
-              ctx.getProperty(
-                  X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY))) {
+      log.debug("X509 certificate validation failed.");
+      final Object errorCodeObj2 =
+          ctx.getProperty(X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY);
+      final String errorCode2 = errorCodeObj2 instanceof String ? (String) errorCodeObj2 : null;
+      if (StringUtils.isEmpty(errorCode2)) {
         ctx.setProperty(
             X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
             X509CertificateConstants.X509_CERTIFICATE_NOT_VALID_ERROR_CODE);
@@ -621,24 +638,46 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     final String userNameAttribute =
         getAuthenticatorConfig().getParameterMap().get(X509CertificateConstants.USERNAME);
 
-    if (log.isDebugEnabled()) {
-      log.debug("Getting username attribute: " + userNameAttribute);
-    }
+    final List<Rdn> rdns = ldapDN.getRdns();
+    log.debug("Parsing certificate Subject DN with " + rdns.size() + " RDN(s)");
 
-    for (final Rdn rdn : ldapDN.getRdns()) {
+    boolean foundUsernameAttribute = false;
+    for (final Rdn rdn : rdns) {
       claims.put(
           ClaimMapping.build(rdn.getType(), rdn.getType(), null, false),
           String.valueOf(rdn.getValue()));
 
-      if (StringUtils.isNotEmpty(userNameAttribute) && userNameAttribute.equals(rdn.getType())) {
-        if (log.isDebugEnabled()) {
-          log.debug("Setting X509Certificate username attribute: " + userNameAttribute);
-        }
+      // equalsIgnoreCase because Subject DN attribute types are case-insensitive
+      if (StringUtils.isNotEmpty(userNameAttribute) && userNameAttribute.equalsIgnoreCase(rdn.getType())) {
+        foundUsernameAttribute = true;
+        log.debug("Setting X509Certificate username attribute: " + userNameAttribute);
         ctx.setProperty(
             X509CertificateConstants.X509_CERTIFICATE_USERNAME_CONTEXT_PROPERTY,
             String.valueOf(rdn.getValue()));
       }
     }
+
+    if (StringUtils.isNotEmpty(userNameAttribute)) {
+      if (foundUsernameAttribute) {
+        log.debug("Configured username attribute '" + userNameAttribute
+            + "' matched in certificate Subject DN");
+      } else {
+        // Collect RDN type names for diagnostics (no values — avoid PII)
+        final StringBuilder availableRdns = new StringBuilder();
+        for (final Rdn r : rdns) {
+          if (availableRdns.length() > 0) {
+            availableRdns.append(", ");
+          }
+          availableRdns.append(r.getType());
+        }
+        log.warn("Configured username RDN attribute '" + userNameAttribute
+            + "' not found in certificate Subject DN. Available RDN types: ["
+            + availableRdns + "]");
+      }
+    } else {
+      log.debug("No username attribute configured; username will not be extracted from Subject DN");
+    }
+
     return claims;
   }
 

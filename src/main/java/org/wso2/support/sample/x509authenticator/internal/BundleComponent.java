@@ -27,22 +27,26 @@ public class BundleComponent {
       registrationResult =
           context.getBundleContext().registerService(serviceClass.getName(), serviceInstance, null);
 
+      final String canonicalName = serviceInstance.getClass().getCanonicalName();
+      final String serviceName = serviceClass.getName();
+
       if (registrationResult == null) {
         log.error(
-            String.format(
-                "Error registering %s as a %s. Service registration result is null.",
-                serviceInstance.getClass().getCanonicalName(), serviceClass.getName()));
+            "Error registering "
+                + canonicalName
+                + " as a "
+                + serviceName
+                + ". Service registration result is null.");
       } else {
-        log.info(
-            String.format(
-                "%s successfully registered as a %s.",
-                serviceInstance.getClass().getCanonicalName(), serviceClass.getName()));
+        log.info(canonicalName + " successfully registered as a " + serviceName + ".");
       }
     } catch (final Exception e) {
       log.error(
-          String.format(
-              "Error registering %s as a %s. Service registration failed.",
-              serviceInstance.getClass().getCanonicalName(), serviceClass.getName()),
+          "Error registering "
+              + serviceInstance.getClass().getCanonicalName()
+              + " as a "
+              + serviceClass.getName()
+              + ". Service registration failed.",
           e);
     }
   }
@@ -66,13 +70,13 @@ public class BundleComponent {
       policy = ReferencePolicy.DYNAMIC,
       unbind = "unsetRealmService")
   protected void setRealmService(final RealmService realmService) {
-    if (log.isDebugEnabled()) log.debug("Setting the Realm Service.");
+    log.debug("Setting the Realm Service.");
 
     ServiceHolder.getInstance().setRealmService(realmService);
   }
 
   protected void unsetRealmService(final RealmService ignored) {
-    if (log.isDebugEnabled()) log.debug("Unsetting the Realm Service.");
+    log.debug("Unsetting the Realm Service.");
 
     ServiceHolder.getInstance().setRealmService(null);
   }
@@ -84,13 +88,13 @@ public class BundleComponent {
       policy = ReferencePolicy.DYNAMIC,
       unbind = "unsetAccountLockService")
   protected void setAccountLockService(final AccountLockService accountLockService) {
-    if (log.isDebugEnabled()) log.debug("Setting the Account Lock Service.");
+    log.debug("Setting the Account Lock Service.");
 
     ServiceHolder.getInstance().setAccountLockService(accountLockService);
   }
 
   protected void unsetAccountLockService(final AccountLockService ignored) {
-    if (log.isDebugEnabled()) log.debug("Unsetting the Account Lock Service.");
+    log.debug("Unsetting the Account Lock Service.");
 
     ServiceHolder.getInstance().setAccountLockService(null);
   }

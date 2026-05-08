@@ -1,21 +1,23 @@
 # Custom X509 Certificate Authenticator for WSO2 Identity Server
 
 This repository contains a sample **X509 Certificate Authenticator** for WSO2 Identity Server (IS) 5.10.0. It
-enables robust mutual TLS (mTLS) authentication flows, supporting both **SSL Termination** (at a Load Balancer) and **SSL Passthrough** (direct to WSO2 IS).
+enables robust mutual TLS (mTLS) authentication flows, supporting both **SSL Termination** (at a Load Balancer) and *
+*SSL Passthrough** (direct to WSO2 IS).
 
 ## Features
 
 * **Flexible Identity Resolution:** Supports resolving users via Subject DN, Subject Alternative Name (SAN) regex, or
-custom Claim URIs.
+  custom Claim URIs.
 
 * **Hybrid mTLS Architecture:** Compatible with proxy-terminated SSL (via `X-SSL-CERT` header) or direct Tomcat mTLS
-connectors.
+  connectors.
 
-* **Secondary User Store Search:** Optionally searches across all connected user stores if the domain is not specified in
-the certificate.
+* **Secondary User Store Search:** Optionally searches across all connected user stores if the domain is not specified
+  in
+  the certificate.
 
 * **Self-Registration:** Automatically associates the authentication certificate with the user's profile upon successful
-login if enabled.
+  login if enabled.
 
 * **Revocation Checks:** Integrated CRL and OCSP validation using WSO2's `RevocationValidationManager`.
 
@@ -171,7 +173,7 @@ parameters.X509RequestHeaderName = "X-SSL-CERT"
 You must configure a connector to handle the certificate traffic.
 
 * **Dedicated mTLS Port (Recommended)**
-Segregates mTLS traffic to port 8443, leaving 9443 for standard console access.
+  Segregates mTLS traffic to port 8443, leaving 9443 for standard console access.
 
 ```toml
 [custom_transport.x509.properties]
@@ -193,7 +195,7 @@ ssl_protocol = "TLS"
 ```
 
 * **SSL Termination (Proxy)**
-If using NGINX/Load Balancer to terminate SSL, enable the **Certificate Valve** to parse the `X-SSL-CERT` header.
+  If using NGINX/Load Balancer to terminate SSL, enable the **Certificate Valve** to parse the `X-SSL-CERT` header.
 
 ```toml
 [x509]
@@ -211,7 +213,9 @@ For the authenticator to perform revocation checks (CRL/OCSP), the Certificate A
 the WSO2 Registry.
 
 1. **Prepare Certificates:** Ensure you have your Root CA and Intermediate CA PEM files.
-2. **Determine Registry Paths:** Use the [`cert-path-tool`](https://github.com/vfraga/wso2is-x509-cacert-registry-path-tool) to generate the correct normalized registry path for your CAs.
+2. **Determine Registry Paths:** Use the [
+   `cert-path-tool`](https://github.com/vfraga/wso2is-x509-cacert-registry-path-tool) to generate the correct normalized
+   registry path for your CAs.
 
 ```bash
 java -jar cert-path-tool-1.0.0.jar -f /path/to/root-ca.pem -s
@@ -227,7 +231,8 @@ java -jar cert-path-tool-1.0.0.jar -f /path/to/root-ca.pem -s
 4. **Create Resource:**
 
 * Inside the specific CA collection, add a new **Resource** (Name it anything, e.g., `content`).
-* **Content:** Paste the PEM content (Body only, remove headers (i.e. `BEGIN CERTIFICATE`, `END CERTIFICATE`) and newlines).
+* **Content:** Paste the PEM content (Body only, remove headers (i.e. `BEGIN CERTIFICATE`, `END CERTIFICATE`) and
+  newlines).
 
 5. **Add Properties:**
    Add the following properties to the registry resource.

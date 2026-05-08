@@ -62,24 +62,20 @@ public final class X509CertificateUtil {
 
     try {
 
-      if (log.isDebugEnabled()) {
-        log.debug("Retrieving X509Certificate from user claim: " + userCertificateClaimUri);
-      }
+      log.debug("Retrieving X509Certificate from user claim: " + userCertificateClaimUri);
 
       final Map<String, String> claimValues =
           userStoreManager.getUserClaimValues(
               username, new String[] {userCertificateClaimUri}, null);
       final String userCertificate = claimValues.get(userCertificateClaimUri);
 
-      if (log.isDebugEnabled()) {
-        // Avoid logging raw certificate value. Log only presence and size to aid debugging.
-        log.debug(
-            "User certificate claim present: "
-                + StringUtils.isNotEmpty(userCertificate)
-                + " (len="
-                + (userCertificate != null ? userCertificate.length() : 0)
-                + ")");
-      }
+      // Avoid logging raw certificate value. Log only presence and size to aid debugging.
+      log.debug(
+          "User certificate claim present: "
+              + StringUtils.isNotEmpty(userCertificate)
+              + " (len="
+              + (userCertificate != null ? userCertificate.length() : 0)
+              + ")");
       if (StringUtils.isEmpty(userCertificate)) {
         return null;
       }
@@ -89,12 +85,11 @@ public final class X509CertificateUtil {
               .generateCertificate(
                   new ByteArrayInputStream(Base64.getMimeDecoder().decode(userCertificate)));
     } catch (final CertificateException e) {
-      log.error("Error while decoding the certificate", e);
+      throw new AuthenticationFailedException("Error while decoding the certificate", e);
     } catch (final UserStoreException e) {
-      log.error("Error while retrieving the user certificate data", e);
+      throw new AuthenticationFailedException(
+          "Error while retrieving the user certificate data", e);
     }
-
-    return null;
   }
 
   /**
@@ -119,9 +114,7 @@ public final class X509CertificateUtil {
           userCertificateClaimUri,
           Base64.getEncoder().encodeToString(x509Certificate.getEncoded()));
 
-      if (log.isDebugEnabled()) {
-        log.debug("Adding X509Certificate to user claim: " + userCertificateClaimUri);
-      }
+      log.debug("Adding X509Certificate to user claim: " + userCertificateClaimUri);
 
       userStoreManager.setUserClaimValues(username, claims, X509CertificateConstants.DEFAULT);
     } catch (final CertificateException e) {
@@ -130,10 +123,8 @@ public final class X509CertificateUtil {
       throw new AuthenticationFailedException("Error while storing certificate in user store", e);
     }
 
-    if (log.isDebugEnabled()) {
-      // Do not log the username to avoid exposing PII in logs.
-      log.debug("X509 certificate was added to user claim for tenant: " + tenantDomain);
-    }
+    // Do not log the username to avoid exposing PII in logs.
+    log.debug("X509 certificate was added to user claim for tenant: " + tenantDomain);
   }
 
   /**
@@ -166,27 +157,21 @@ public final class X509CertificateUtil {
       throw new AuthenticationFailedException("Error while retrieving certificate", e);
     }
 
-    if (log.isDebugEnabled()) {
-      log.debug(
-          "Starting X509 certificate validation. Tenant: "
-              + tenantDomain
-              + ", self-registration enabled: "
-              + isSelfRegistrationEnable);
-    }
+    log.debug(
+        "Starting X509 certificate validation. Tenant: "
+            + tenantDomain
+            + ", self-registration enabled: "
+            + isSelfRegistrationEnable);
     try {
       final X509Certificate certInUserClaim = getCertificate(userName, tenantDomain);
       if (certInUserClaim != null) {
         if (!x509Certificate.equals(certInUserClaim)) {
-          if (log.isDebugEnabled()) {
-            log.debug("The presented certificate does not match the one stored in the user claim.");
-          }
+          log.debug("The presented certificate does not match the one stored in the user claim.");
           return false;
         }
       } else if (!isSelfRegistrationEnable
           && !isUserExists(userName, tenantDomain, authenticationContext)) {
-        if (log.isDebugEnabled()) {
-          log.debug("User does not exist and self-registration is disabled.");
-        }
+        log.debug("User does not exist and self-registration is disabled.");
         return false;
       }
 
@@ -223,10 +208,8 @@ public final class X509CertificateUtil {
     if (authConfig != null) {
       return authConfig.getParameterMap();
     }
-    if (log.isDebugEnabled()) {
-      log.debug(
-          "AuthenticatorConfig is not provided for " + X509CertificateConstants.AUTHENTICATOR_NAME);
-    }
+    log.debug(
+        "AuthenticatorConfig is not provided for " + X509CertificateConstants.AUTHENTICATOR_NAME);
     return Collections.emptyMap();
   }
 
@@ -251,9 +234,7 @@ public final class X509CertificateUtil {
    */
   public static UserRealm getUserRealm(final String tenantDomain)
       throws AuthenticationFailedException {
-    if (log.isDebugEnabled()) {
-      log.debug("Getting user realm for tenantDomain: " + tenantDomain);
-    }
+    log.debug("Getting user realm for tenantDomain: " + tenantDomain);
     try {
       final int tenantId = IdentityTenantUtil.getTenantId(tenantDomain);
       final RealmService realmService = ServiceHolder.getInstance().getRealmService();
@@ -318,18 +299,14 @@ public final class X509CertificateUtil {
     final String[] claims = {userCertificateClaimUri};
 
     try {
-      if (log.isDebugEnabled()) {
-        log.debug("Deleting X509Certificate from user claim: " + userCertificateClaimUri);
-      }
+      log.debug("Deleting X509Certificate from user claim: " + userCertificateClaimUri);
 
       userStoreManager.deleteUserClaimValues(username, claims, X509CertificateConstants.DEFAULT);
     } catch (final UserStoreException e) {
       throw new AuthenticationFailedException(
           "Error while deleting certificate of " + username + " in tenant: " + tenantDomain, e);
     }
-    if (log.isDebugEnabled()) {
-      log.debug("X509 certificate claim deleted for " + username + " in tenant: " + tenantDomain);
-    }
+    log.debug("X509 certificate claim deleted for " + username + " in tenant: " + tenantDomain);
   }
 
   private static void addUserCertificate(
@@ -429,6 +406,16 @@ public final class X509CertificateUtil {
     final Map<String, String> params = getX509Parameters();
     String fullyQualifiedUsername = null;
 
+    // Log the resolution strategy being used
+    if (log.isDebugEnabled()) {
+      log.debug(
+          "Resolving user for identifier. SearchAllUserStores=["
+              + params.get(X509CertificateConstants.SEARCH_ALL_USER_STORES_CONFIG_PROPERTY)
+              + "], LoginClaimURIs=["
+              + params.get(X509CertificateConstants.LOGIN_CLAIM_URIS_CONFIG_PROPERTY)
+              + "]");
+    }
+
     try {
       final UserStoreManager userStoreManager = getRequiredUserStoreManager(tenantDomain);
 
@@ -440,15 +427,20 @@ public final class X509CertificateUtil {
         // Assigns username if unique; throws on conflicts
         if (filteredUsers != null && filteredUsers.length == 1) {
           fullyQualifiedUsername = filteredUsers[0];
+          log.debug("SearchAllUserStores: exactly 1 user found");
         } else if (filteredUsers != null && filteredUsers.length > 1) {
           context.setProperty(
               X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
               X509CertificateConstants.USERNAME_CONFLICT);
-          if (log.isDebugEnabled()) {
-            log.debug("Conflicting users found for the given identifier.");
-          }
+          log.debug(
+              "Conflicting users found for the given identifier. SearchAllUserStores: "
+                  + filteredUsers.length
+                  + " conflicting users found");
           throw new AuthenticationFailedException(
               "Conflicting users found for the given identifier.");
+        } else if (filteredUsers != null) {
+          // No users matched in any user store
+          log.debug("SearchAllUserStores: no users found matching the identifier");
         }
       } else {
         if (userStoreManager.isExistingUser(identifier)) {
@@ -464,21 +456,26 @@ public final class X509CertificateUtil {
       final String resolvedFromClaims =
           resolveByMultiAttribute(identifier, context, loginClaimUris, tenantDomain);
 
+      if (resolvedFromClaims != null) {
+        log.debug("Claim-based resolution found a user");
+      } else {
+        log.debug("Claim-based resolution found no user");
+      }
+
       if (fullyQualifiedUsername != null
           && resolvedFromClaims != null
           && !fullyQualifiedUsername.equals(resolvedFromClaims)) {
         context.setProperty(
             X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
             X509CertificateConstants.USERNAME_CONFLICT);
-        if (log.isDebugEnabled()) {
-          log.debug("Conflicting users found for the given identifier.");
-        }
+        log.debug("Conflicting users found for the given identifier.");
         throw new AuthenticationFailedException(
             "Conflicting users found for the given identifier.");
       }
 
       if (fullyQualifiedUsername == null) {
         fullyQualifiedUsername = resolvedFromClaims;
+        log.debug("Using claim-based resolution result as final username");
       }
 
       if (fullyQualifiedUsername == null
@@ -488,6 +485,11 @@ public final class X509CertificateUtil {
         context.setProperty(
             X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
             X509CertificateConstants.USER_NOT_FOUND_ERROR_CODE);
+      }
+      // Warn operators that user resolution failed across all strategies
+      if (fullyQualifiedUsername == null) {
+        log.warn(
+            "User not resolved by any method (SearchAllUserStores and LoginClaimURIs both failed to find a unique match)");
       }
     } catch (final UserStoreException e) {
       throw new AuthenticationFailedException("Error while resolving fully qualified username", e);
@@ -502,6 +504,7 @@ public final class X509CertificateUtil {
       if (!cacheKey.equals(resolvedCacheKey)) {
         context.setProperty(resolvedCacheKey, fullyQualifiedUsername);
       }
+      log.debug("User resolved successfully");
     }
     return fullyQualifiedUsername;
   }
@@ -532,6 +535,8 @@ public final class X509CertificateUtil {
     final AbstractUserStoreManager um =
         (AbstractUserStoreManager) getRequiredUserStoreManager(tenantDomain);
 
+    log.debug("Searching for user by claim URIs: [" + loginClaimURIs + "]");
+
     String resolvedUser = null;
     for (final String claimUri : claimUris) {
       final String[] usersWithClaim = um.getUserList(claimUri, identifier, null);
@@ -541,12 +546,18 @@ public final class X509CertificateUtil {
           context.setProperty(
               X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
               X509CertificateConstants.USERNAME_CONFLICT);
-          if (log.isDebugEnabled()) {
-            log.debug("Conflicting users found for the given claim value.");
-          }
+          log.debug(
+              "Claim URI '"
+                  + claimUri
+                  + "' returned "
+                  + usersWithClaim.length
+                  + " users (conflict detected)");
           throw new AuthenticationFailedException("Conflicting users with the given claim value.");
         }
         resolvedUser = usersWithClaim[0];
+        log.debug("Claim URI '" + claimUri + "' returned 1 user");
+      } else {
+        log.debug("Claim URI '" + claimUri + "' returned no users");
       }
     }
 
@@ -572,9 +583,7 @@ public final class X509CertificateUtil {
             .getAccountLockService()
             .isAccountLocked(user.getUserName(), user.getTenantDomain(), user.getUserStoreDomain());
       } catch (AccountLockServiceException e) {
-        if (log.isDebugEnabled()) {
-          log.debug("Error while calling the account lock service for user ", e);
-        }
+        log.debug("Error while calling the account lock service for user ", e);
         throw e;
       }
     }
@@ -602,9 +611,7 @@ public final class X509CertificateUtil {
         return Boolean.parseBoolean(
             values.get(X509CertificateConstants.ACCOUNT_DISABLED_CLAIM_URI));
       } catch (UserStoreException | AuthenticationFailedException e) {
-        if (log.isDebugEnabled()) {
-          log.debug("Error while checking account disable for user.", e);
-        }
+        log.debug("Error while checking account disable for user.", e);
         throw new UserStoreException(e);
       }
     }
