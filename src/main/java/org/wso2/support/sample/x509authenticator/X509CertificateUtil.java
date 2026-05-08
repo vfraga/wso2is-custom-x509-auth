@@ -546,12 +546,16 @@ public final class X509CertificateUtil {
           context.setProperty(
               X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
               X509CertificateConstants.USERNAME_CONFLICT);
-          log.debug(
-              "Claim URI '"
-                  + claimUri
-                  + "' returned "
-                  + usersWithClaim.length
-                  + " users (conflict detected)");
+          if (log.isDebugEnabled()) {
+            log.debug(
+                "Claim URI '"
+                    + claimUri
+                    + "' returned "
+                    + usersWithClaim.length
+                    + " users (conflict detected, resolvedUserMatchingClaim="
+                    + (resolvedUser != null && resolvedUser.equals(usersWithClaim[0]))
+                    + ")");
+          }
           throw new AuthenticationFailedException("Conflicting users with the given claim value.");
         }
         resolvedUser = usersWithClaim[0];
