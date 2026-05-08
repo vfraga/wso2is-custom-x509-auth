@@ -279,7 +279,7 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
 
     final Pattern pattern = getSubjectPattern();
     for (final Rdn rdn : ldapDN.getRdns()) {
-      if (pattern != null && userNameAttribute.equals(rdn.getType())) {
+      if (pattern != null && userNameAttribute.equalsIgnoreCase(rdn.getType())) {
         matchingRdnCount++;
         final Matcher m = pattern.matcher(String.valueOf(rdn.getValue()));
         addMatchStringsToList(m, matches);
