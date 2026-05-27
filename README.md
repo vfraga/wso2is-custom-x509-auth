@@ -151,6 +151,7 @@ enable = true
 | `LoginClaimURIs`          | `http://wso2.org/claims/username` | Comma-separated list of Claim URIs to search for the user if the Subject DN doesn't match a username directly.                            |
 | `SearchAllUserStores`     | `false`                           | If `true`, searches for the resolved username across all connected user stores (useful if the domain is not provided in the certificate). |
 | `EnforceSelfRegistration` | `false`                           | If `true`, stores the authentication certificate in the user's profile upon successful login.                                             |
+| `CheckUserCertClaim`      | `true`                            | If `false`, skips checking the userCertificate claim during certificate validation against the user store.                                |
 | `X509RequestHeaderName`   | `X-SSL-CERT`                      | The HTTP header name containing the PEM certificate (used in SSL Termination).                                                            |
 | `UsernameRegex`           | *None*                            | A regex pattern to extract the username from the Subject DN. Takes precedence over `username`.                                            |
 | `AlternativeNamesRegex`   | *None*                            | A regex pattern to extract the username from the Subject Alternative Name (SAN). Takes precedence over Subject DN.                        |

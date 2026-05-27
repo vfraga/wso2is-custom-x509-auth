@@ -231,6 +231,20 @@ public class X509CertificateUtilTest {
   }
 
   @Test
+  public void testGetCertificateReturnsNullWhenCheckUserCertClaimIsFalse() throws Exception {
+    AuthenticationContext context = new AuthenticationContext();
+    Map<String, String> params = new HashMap<>();
+    params.put(X509CertificateConstants.CHECK_USER_CERT_CLAIM_CONFIG_PROPERTY, "false");
+    setupMocks(context, params);
+
+    X509Certificate result =
+        X509CertificateUtil.getCertificate("testuser", context.getTenantDomain());
+    assertNull(
+        result,
+        "getCertificate should return null when CheckUserCertClaim is set to false");
+  }
+
+  @Test
   public void testGetUserStoreDomainNameWhenNoDomainInIdentifier() throws Exception {
     AuthenticationContext context = new AuthenticationContext();
     Map<String, String> params = new HashMap<>();

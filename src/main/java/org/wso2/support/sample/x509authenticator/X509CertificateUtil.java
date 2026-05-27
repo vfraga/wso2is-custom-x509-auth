@@ -57,6 +57,14 @@ public final class X509CertificateUtil {
   public static X509Certificate getCertificate(final String username, final String tenantDomain)
       throws AuthenticationFailedException {
 
+    final String checkUserCertClaim =
+        getX509Parameters().get(X509CertificateConstants.CHECK_USER_CERT_CLAIM_CONFIG_PROPERTY);
+    if (!Boolean.parseBoolean(checkUserCertClaim)) {
+      log.debug(
+          "CheckUserCertClaim is set to false, skipping user certificate claim retrieval for user");
+      return null;
+    }
+
     final UserStoreManager userStoreManager = getRequiredUserStoreManager(tenantDomain);
     final String userCertificateClaimUri = getUserCertificateClaimUri();
 
@@ -215,12 +223,10 @@ public final class X509CertificateUtil {
 
   /** Resolves the claim URI used to store the user certificate. */
   public static String getUserCertificateClaimUri() {
-    final Map<String, String> parametersMap = getX509Parameters();
-    if (parametersMap != null) {
-      final String configured = parametersMap.get(X509CertificateConstants.SET_CLAIM_URI);
-      if (configured != null) {
-        return configured;
-      }
+    final String setClaimUriConfig =
+        getX509Parameters().get(X509CertificateConstants.SET_CLAIM_URI);
+    if (setClaimUriConfig != null) {
+      return setClaimUriConfig;
     }
     return X509CertificateConstants.USER_CERTIFICATE_CLAIM_URI;
   }

@@ -31,6 +31,7 @@ public final class X509CertificateConstants {
   public static final String ENFORCE_SELF_REGISTRATION_CONFIG_PROPERTY = "EnforceSelfRegistration";
   public static final String SEARCH_ALL_USER_STORES_CONFIG_PROPERTY = "SearchAllUserStores";
   public static final String LOGIN_CLAIM_URIS_CONFIG_PROPERTY = "LoginClaimURIs";
+  public static final String CHECK_USER_CERT_CLAIM_CONFIG_PROPERTY = "CheckUserCertClaim";
 
   public static final String X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY =
       "X509CertificateErrorCode";
