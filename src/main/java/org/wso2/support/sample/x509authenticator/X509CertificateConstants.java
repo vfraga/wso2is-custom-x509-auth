@@ -33,6 +33,36 @@ public final class X509CertificateConstants {
   public static final String LOGIN_CLAIM_URIS_CONFIG_PROPERTY = "LoginClaimURIs";
   public static final String CHECK_USER_CERT_CLAIM_CONFIG_PROPERTY = "CheckUserCertClaim";
 
+  /**
+   * Maps named capture groups of {@code UsernameRegex} to claim URIs, combined with AND when
+   * resolving the user. Format: {@code group:claimURI,group:claimURI} (e.g.
+   * {@code employeeNumber:http://wso2.org/claims/employeeNumber,region:http://wso2.org/claims/region}).
+   * When set, the user is resolved by searching the primary group's claim and disambiguating the
+   * remaining candidates against the other groups' claims.
+   */
+  public static final String COMPOUND_CLAIM_MAPPING_CONFIG_PROPERTY = "CompoundClaimMapping";
+
+  /**
+   * Names the {@link #COMPOUND_CLAIM_MAPPING_CONFIG_PROPERTY} group used as the primary lookup key
+   * (the always-present, most selective value). Defaults to the first entry in the mapping.
+   */
+  public static final String PRIMARY_CLAIM_GROUP_CONFIG_PROPERTY = "PrimaryClaimGroup";
+
+  /** Context property: claim URI searched first during compound resolution. */
+  public static final String X509_COMPOUND_PRIMARY_CLAIM_URI_CONTEXT_PROPERTY =
+      "X509CompoundPrimaryClaimUri";
+
+  /** Context property: value searched against the primary claim during compound resolution. */
+  public static final String X509_COMPOUND_PRIMARY_VALUE_CONTEXT_PROPERTY =
+      "X509CompoundPrimaryValue";
+
+  /**
+   * Context property: serializable {@code Map<claimURI, expectedValue>} of the secondary filters
+   * applied (ANDed) to the candidates returned by the primary claim search.
+   */
+  public static final String X509_COMPOUND_SECONDARY_FILTERS_CONTEXT_PROPERTY =
+      "X509CompoundSecondaryFilters";
+
   public static final String X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY =
       "X509CertificateErrorCode";
   public static final String X509_CERTIFICATE_USERNAME_CONTEXT_PROPERTY = "X509CertificateUsername";

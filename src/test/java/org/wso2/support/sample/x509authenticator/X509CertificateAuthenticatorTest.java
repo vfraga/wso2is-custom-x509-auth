@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.powermock.api.mockito.PowerMockito.*;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.fail;
 
 import java.io.ByteArrayInputStream;
@@ -188,6 +189,30 @@ public class X509CertificateAuthenticatorTest {
           + "MnL4jtEI7tHs89GB+tfurD2dsSLW5ghXaDwmZTNuaUOgD8SRYwh0AG+en1Xk2v3/\n"
           + "73zDq+0+CCuZv87EyQbA5QobwBlYNe45ocyxSzocJLTapVkcXytDr/+ZhhdB7ybL\n"
           + "UZoGqB7ayed6KBFi";
+
+  // Self-signed cert with Subject DN "serialNumber=IDIT-ABC123XYZ, CN=Test User, O=Example Org,
+  // C=IT" — used to exercise named-group extraction for compound claim resolution.
+  private static final String CERT_WITH_SERIALNUMBER_RDN =
+      "MIIDgTCCAmmgAwIBAgIUEuTgmb6e6c0Yaj8c7t0D7i/VGzYwDQYJKoZIhvcNAQEL\n"
+          + "BQAwUDEXMBUGA1UEBRMOSURJVC1BQkMxMjNYWVoxEjAQBgNVBAMMCVRlc3QgVXNl\n"
+          + "cjEUMBIGA1UECgwLRXhhbXBsZSBPcmcxCzAJBgNVBAYTAklUMB4XDTI2MDYxMDAx\n"
+          + "NTUxOVoXDTM2MDYwNzAxNTUxOVowUDEXMBUGA1UEBRMOSURJVC1BQkMxMjNYWVox\n"
+          + "EjAQBgNVBAMMCVRlc3QgVXNlcjEUMBIGA1UECgwLRXhhbXBsZSBPcmcxCzAJBgNV\n"
+          + "BAYTAklUMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvy/FXStlPum4\n"
+          + "IILugx6NrTYRHuZg22dszfA0KXflCF91Am4Gf4QLD98qjF+OgnQRP0wFKDOtmw3F\n"
+          + "YuofEah2QNPEnm26eUCFkbrRXz/owNhnIJoxoDIYjuxbuDtRwxdK7hibdZqIGDiO\n"
+          + "/rmgG32mq1BSdkwZHi89fW2dZ0uzkjwAKNlxmEj05GNzgju5VeJDqIkVpV0u5qDR\n"
+          + "6R4VOkm2DMmv53078YBlFhWkW0qDhx2Ro9T+Gy9vvc3kMZqv68AJTqm5SpOn7vBy\n"
+          + "YsYlPa3pJF89KWCfaMf1Uk8kki/6TJSfzVkILuWXYULfOKVQSs8foNrsdKixsMeZ\n"
+          + "bSpMnmfYjQIDAQABo1MwUTAdBgNVHQ4EFgQUEFiMl9gYjcZpRGrIdBk8aIoFSCow\n"
+          + "HwYDVR0jBBgwFoAUEFiMl9gYjcZpRGrIdBk8aIoFSCowDwYDVR0TAQH/BAUwAwEB\n"
+          + "/zANBgkqhkiG9w0BAQsFAAOCAQEAOa6++bxrEKyiiw1uX3Copsp4m6q05aJ4VMdp\n"
+          + "eL0F299ICGiAQ4LNYG5mAwfG1vxz2Fiz951B9Iy0SDOoRfptoc1Lx3YFEhK7/gER\n"
+          + "Cj7bqF5c89JoXi5OW/QQqvbmR7QtUjJy2U073pKJtMzTVwz1S/LueHj2H7oY3XFh\n"
+          + "xBmSIy8LDLWnc9F4BqMKdzLPxA0NE+TLrQ8HXFylWWZxU3xPQcE1oa4ilnCE+1E7\n"
+          + "pXW8yncodWqd0KkxvDc8p4xkxGg3sl6QggISKwRDyf4MUlvdSvYPW7GsgsQ/aqQ9\n"
+          + "i2lN4SNhxlP7CvedohymJag6gPnSLqwFQ7f/KHG8aES+7tAwew==";
+
   private AuthenticatorConfig authenticatorConfig1;
 
   @ObjectFactory
@@ -520,6 +545,84 @@ public class X509CertificateAuthenticatorTest {
               X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY),
           X509CertificateConstants.USER_ACCOUNT_DISABLED);
     }
+  }
+
+  @Test
+  public void testProcessAuthenticationResponseCompoundClaimMapping() throws Exception {
+    CertificateFactory factory = CertificateFactory.getInstance("X.509");
+    X509Certificate cert =
+        (X509Certificate)
+            factory.generateCertificate(
+                new ByteArrayInputStream(
+                    DatatypeConverter.parseBase64Binary(CERT_WITH_SERIALNUMBER_RDN)));
+    X509Certificate[] certificateArray = {cert};
+
+    HttpServletRequest mockRequest = mock(HttpServletRequest.class);
+    AuthenticationContext authenticationContext = new AuthenticationContext();
+    HttpServletResponse mockResponse = mock(HttpServletResponse.class);
+    when(mockRequest.getAttribute(X509CertificateConstants.X_509_CERTIFICATE))
+        .thenReturn(certificateArray);
+
+    SequenceConfig sequenceConfig = new SequenceConfig();
+    sequenceConfig.setStepMap(new HashMap<>());
+    authenticationContext.setSequenceConfig(sequenceConfig);
+
+    AuthenticatorConfig authenticatorConfig = new AuthenticatorConfig();
+    Map<String, String> parameterMap = new HashMap<>();
+    parameterMap.put(X509CertificateConstants.USERNAME, "serialNumber");
+    parameterMap.put(
+        X509CertificateConstants.USER_NAME_REGEX_CONFIG_PROPERTY,
+        "ID(?<country>[A-Z]{2})?-(?<idNumber>[A-Za-z0-9]+)");
+    parameterMap.put(
+        X509CertificateConstants.COMPOUND_CLAIM_MAPPING_CONFIG_PROPERTY,
+        "idNumber:http://wso2.org/claims/employeeNumber,country:http://wso2.org/claims/region");
+    parameterMap.put(X509CertificateConstants.PRIMARY_CLAIM_GROUP_CONFIG_PROPERTY, "idNumber");
+    authenticatorConfig.setParameterMap(parameterMap);
+    authenticatorConfig1 = authenticatorConfig;
+
+    X509CertificateAuthenticator x509CertificateAuthenticator =
+        new MockX509CertificateAuthenticator();
+    X509CertificateAuthenticator spy = PowerMockito.spy(x509CertificateAuthenticator);
+    doReturn(authenticatorConfig).when(spy, "getAuthenticatorConfig");
+    doReturn("test-user").when(spy, "addDomainToName", anyString(), anyString());
+    doNothing().when(spy, "setupUserContext", anyString(), anyString());
+    AuthenticatedUser authenticatedUser = new AuthenticatedUser();
+    authenticatedUser.setUserName("test-user");
+    doReturn(authenticatedUser).when(spy, "createAuthenticatedUser", anyString(), anyString());
+
+    mockStatic(X509CertificateUtil.class);
+    when(X509CertificateUtil.validateCertificate(
+            anyString(), anyString(), any(), any(), anyBoolean()))
+        .thenReturn(true);
+    when(X509CertificateUtil.getUserStoreDomainName(anyString(), anyString(), any()))
+        .thenReturn("PRIMARY");
+    when(X509CertificateUtil.isAccountLocked(any(AuthenticatedUser.class))).thenReturn(false);
+    when(X509CertificateUtil.isAccountDisabled(any(AuthenticatedUser.class))).thenReturn(false);
+    mockStatic(IdentityUtil.class);
+    when(IdentityUtil.getPrimaryDomainName()).thenReturn("PRIMARY");
+
+    spy.process(mockRequest, mockResponse, authenticationContext);
+
+    // The named groups must be parsed from the SERIALNUMBER RDN and stashed as the compound spec.
+    assertEquals(
+        authenticationContext.getProperty(
+            X509CertificateConstants.X509_COMPOUND_PRIMARY_CLAIM_URI_CONTEXT_PROPERTY),
+        "http://wso2.org/claims/employeeNumber");
+    assertEquals(
+        authenticationContext.getProperty(
+            X509CertificateConstants.X509_COMPOUND_PRIMARY_VALUE_CONTEXT_PROPERTY),
+        "ABC123XYZ");
+
+    Object filtersObj =
+        authenticationContext.getProperty(
+            X509CertificateConstants.X509_COMPOUND_SECONDARY_FILTERS_CONTEXT_PROPERTY);
+    assertNotNull(filtersObj, "Secondary filters should be stashed in the context");
+    @SuppressWarnings("unchecked")
+    Map<String, String> filters = (Map<String, String>) filtersObj;
+    assertEquals(
+        filters.get("http://wso2.org/claims/region"),
+        "IT",
+        "The 'country' group value should be mapped to the region claim filter");
   }
 
   class MockX509CertificateAuthenticator extends X509CertificateAuthenticator {

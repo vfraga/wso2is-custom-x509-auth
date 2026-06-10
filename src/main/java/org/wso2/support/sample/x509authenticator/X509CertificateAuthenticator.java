@@ -7,6 +7,7 @@ import java.security.cert.X509Certificate;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -92,17 +93,30 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     } else {
       final String subjectAttributePattern = getSubjectAttributePattern();
       if (subjectAttributePattern != null) {
-        final String subjectAttribute =
-            getMatchedSubjectAttribute(certAttributes, authenticationContext);
-        log.debug(
-            "Validating certificate using the certificate subject attribute: "
-                + subjectAttributePattern);
-        final String usernameAttr =
-            getAuthenticatorConfig().getParameterMap().get(X509CertificateConstants.USERNAME);
-        log.info("Using Subject DN regex resolution (UsernameRegex: " + subjectAttributePattern
-            + ", username attribute: " + usernameAttr + ")");
+        final String compoundClaimMapping =
+            getAuthenticatorConfig()
+                .getParameterMap()
+                .get(X509CertificateConstants.COMPOUND_CLAIM_MAPPING_CONFIG_PROPERTY);
+        if (StringUtils.isNotEmpty(compoundClaimMapping)) {
+          final String primaryValue =
+              prepareCompoundSearch(compoundClaimMapping, certAttributes, authenticationContext);
+          log.info("Using compound claim resolution (UsernameRegex: " + subjectAttributePattern
+              + ", CompoundClaimMapping configured)");
 
-        validateAndSetUsername(subjectAttribute, authenticationContext, cert, claims);
+          validateAndSetUsername(primaryValue, authenticationContext, cert, claims);
+        } else {
+          final String subjectAttribute =
+              getMatchedSubjectAttribute(certAttributes, authenticationContext);
+          log.debug(
+              "Validating certificate using the certificate subject attribute: "
+                  + subjectAttributePattern);
+          final String usernameAttr =
+              getAuthenticatorConfig().getParameterMap().get(X509CertificateConstants.USERNAME);
+          log.info("Using Subject DN regex resolution (UsernameRegex: " + subjectAttributePattern
+              + ", username attribute: " + usernameAttr + ")");
+
+          validateAndSetUsername(subjectAttribute, authenticationContext, cert, claims);
+        }
       } else {
         log.info("Using fallback username resolution (no regex configured)");
         handleFallbackUsername(authenticationContext, cert, claims);
@@ -260,6 +274,166 @@ public class X509CertificateAuthenticator extends AbstractApplicationAuthenticat
     validateUsingSubject(userName, ctx, cert, claims);
     // Do not log the username value to avoid exposing user data.
     log.debug("Certificate validated using the certificate username attribute.");
+  }
+
+  /**
+   * Prepares a compound (AND) claim search: parses {@code CompoundClaimMapping}, extracts the
+   * configured named capture groups from the certificate Subject DN, and stashes the search spec
+   * (primary claim/value and the secondary {@code claimURI -> value} filters) in the context for
+   * {@link X509CertificateUtil} to consume during user resolution.
+   *
+   * @return the primary group's value, used downstream as the username identifier
+   */
+  private String prepareCompoundSearch(
+      final String compoundClaimMapping,
+      final String certAttributes,
+      final AuthenticationContext ctx)
+      throws AuthenticationFailedException {
+
+    final Map<String, String> groupToClaim = parseCompoundClaimMapping(compoundClaimMapping);
+    if (groupToClaim.isEmpty()) {
+      throw new AuthenticationFailedException(
+          "CompoundClaimMapping is configured but no valid 'group:claimURI' entries were parsed");
+    }
+
+    final Map<String, String> groupValues =
+        extractNamedGroups(certAttributes, groupToClaim.keySet(), ctx);
+
+    final String primaryGroup = getPrimaryClaimGroup(groupToClaim);
+    final String primaryValue = groupValues.get(primaryGroup);
+    if (StringUtils.isEmpty(primaryValue)) {
+      ctx.setProperty(
+          X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
+          X509CertificateConstants.X509_CERTIFICATE_SUBJECT_DN_REGEX_NO_MATCHES_ERROR_CODE);
+      throw new AuthenticationFailedException(
+          "Primary group '" + primaryGroup + "' did not yield a value from the certificate");
+    }
+
+    final HashMap<String, String> secondaryFilters = new HashMap<>();
+    for (final Map.Entry<String, String> entry : groupToClaim.entrySet()) {
+      if (!entry.getKey().equals(primaryGroup)) {
+        // Map each secondary claim URI to its expected value; the value may be empty (e.g. an
+        // absent optional segment), which the resolver matches against a null/empty attribute.
+        secondaryFilters.put(entry.getValue(), groupValues.get(entry.getKey()));
+      }
+    }
+
+    ctx.setProperty(
+        X509CertificateConstants.X509_COMPOUND_PRIMARY_CLAIM_URI_CONTEXT_PROPERTY,
+        groupToClaim.get(primaryGroup));
+    ctx.setProperty(
+        X509CertificateConstants.X509_COMPOUND_PRIMARY_VALUE_CONTEXT_PROPERTY, primaryValue);
+    ctx.setProperty(
+        X509CertificateConstants.X509_COMPOUND_SECONDARY_FILTERS_CONTEXT_PROPERTY,
+        secondaryFilters);
+
+    log.debug("Compound search prepared: primary group '" + primaryGroup + "', "
+        + secondaryFilters.size() + " secondary filter(s)");
+    return primaryValue;
+  }
+
+  /** Parses {@code group:claimURI,group:claimURI} into an ordered map (split on the first ':'). */
+  private Map<String, String> parseCompoundClaimMapping(final String mapping) {
+    final Map<String, String> result = new LinkedHashMap<>();
+    for (final String entry : mapping.split(",")) {
+      final String trimmed = entry.trim();
+      if (StringUtils.isEmpty(trimmed)) {
+        continue;
+      }
+      // Claim URIs contain ':' (e.g. http://...), so split on the first ':' only.
+      final int idx = trimmed.indexOf(':');
+      if (idx <= 0 || idx == trimmed.length() - 1) {
+        log.warn(
+            "Ignoring malformed CompoundClaimMapping entry (expected 'group:claimURI'): "
+                + trimmed);
+        continue;
+      }
+      final String group = trimmed.substring(0, idx).trim();
+      final String claimUri = trimmed.substring(idx + 1).trim();
+      if (StringUtils.isNotEmpty(group) && StringUtils.isNotEmpty(claimUri)) {
+        result.put(group, claimUri);
+      }
+    }
+    return result;
+  }
+
+  /** Returns the configured {@code PrimaryClaimGroup}, or the first mapping entry as a fallback. */
+  private String getPrimaryClaimGroup(final Map<String, String> groupToClaim) {
+    final String configured =
+        getAuthenticatorConfig()
+            .getParameterMap()
+            .get(X509CertificateConstants.PRIMARY_CLAIM_GROUP_CONFIG_PROPERTY);
+    if (StringUtils.isNotEmpty(configured) && groupToClaim.containsKey(configured)) {
+      return configured;
+    }
+    if (StringUtils.isNotEmpty(configured)) {
+      log.warn("Configured PrimaryClaimGroup '" + configured
+          + "' is not present in CompoundClaimMapping; defaulting to the first mapping entry");
+    }
+    return groupToClaim.keySet().iterator().next();
+  }
+
+  /**
+   * Extracts the requested named capture groups of {@code UsernameRegex} from the RDN matching the
+   * configured {@code username} type in the certificate Subject DN. A group the pattern does not
+   * capture (e.g. an optional segment) is returned as an empty string.
+   */
+  private Map<String, String> extractNamedGroups(
+      final String certAttributes, final Set<String> groupNames, final AuthenticationContext ctx)
+      throws AuthenticationFailedException {
+
+    final LdapName ldapDN = parseLdapName(certAttributes);
+    final String userNameAttribute =
+        getAuthenticatorConfig().getParameterMap().get(X509CertificateConstants.USERNAME);
+    final Pattern pattern = getSubjectPattern();
+    if (pattern == null) {
+      throw new AuthenticationFailedException(
+          "UsernameRegex must be configured to use CompoundClaimMapping");
+    }
+
+    Map<String, String> extracted = null;
+    for (final Rdn rdn : ldapDN.getRdns()) {
+      if (!userNameAttribute.equalsIgnoreCase(rdn.getType())) {
+        continue;
+      }
+      final Matcher matcher = pattern.matcher(String.valueOf(rdn.getValue()));
+      while (matcher.find()) {
+        final Map<String, String> current = new LinkedHashMap<>();
+        for (final String groupName : groupNames) {
+          final String value = matchedNamedGroup(matcher, groupName);
+          current.put(groupName, value == null ? "" : value);
+        }
+        if (extracted != null && !extracted.equals(current)) {
+          ctx.setProperty(
+              X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
+              X509CertificateConstants.X509_CERTIFICATE_SUBJECT_DN_MULTIPLE_MATCHES_ERROR_CODE);
+          throw new AuthenticationFailedException(
+              "More than one value matched with the given regex");
+        }
+        extracted = current;
+      }
+    }
+
+    if (extracted == null) {
+      ctx.setProperty(
+          X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
+          X509CertificateConstants.X509_CERTIFICATE_SUBJECT_DN_REGEX_NO_MATCHES_ERROR_CODE);
+      throw new AuthenticationFailedException(
+          X509CertificateConstants.X509_CERTIFICATE_SUBJECT_DN_REGEX_NO_MATCHES_ERROR);
+    }
+    return extracted;
+  }
+
+  /** Reads a named capture group, surfacing an unknown group name as a configuration error. */
+  private String matchedNamedGroup(final Matcher matcher, final String groupName)
+      throws AuthenticationFailedException {
+    try {
+      return matcher.group(groupName);
+    } catch (final IllegalArgumentException e) {
+      throw new AuthenticationFailedException(
+          "CompoundClaimMapping references group '" + groupName
+              + "' which is not a named capture group in UsernameRegex", e);
+    }
   }
 
   /**

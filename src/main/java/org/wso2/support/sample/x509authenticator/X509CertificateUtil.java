@@ -6,9 +6,11 @@ import java.io.UnsupportedEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
@@ -409,6 +411,36 @@ public final class X509CertificateUtil {
 
     if (cached instanceof String) return (String) cached;
 
+    // Compound (AND) claim resolution: when the authenticator has stashed a compound search spec,
+    // resolve by searching the primary claim and disambiguating the candidates against the
+    // remaining claims, instead of the single-value (OR) strategy below.
+    final Object primaryClaimUriObj =
+        context.getProperty(
+            X509CertificateConstants.X509_COMPOUND_PRIMARY_CLAIM_URI_CONTEXT_PROPERTY);
+    if (primaryClaimUriObj instanceof String && StringUtils.isNotEmpty((String) primaryClaimUriObj)) {
+      final String resolved =
+          resolveByCompoundClaims((String) primaryClaimUriObj, tenantDomain, context);
+      if (resolved == null
+          && context.getProperty(
+                  X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY)
+              == null) {
+        context.setProperty(
+            X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
+            X509CertificateConstants.USER_NOT_FOUND_ERROR_CODE);
+        log.warn("User not resolved by compound claim search");
+      }
+      if (resolved != null) {
+        context.setProperty(cacheKey, resolved);
+        final String resolvedCacheKey =
+            X509CertificateConstants.X509_CERT_RESOLVED_USERNAME_CONTEXT_PROPERTY + "_" + resolved;
+        if (!cacheKey.equals(resolvedCacheKey)) {
+          context.setProperty(resolvedCacheKey, resolved);
+        }
+        log.debug("User resolved successfully via compound claim search");
+      }
+      return resolved;
+    }
+
     final Map<String, String> params = getX509Parameters();
     String fullyQualifiedUsername = null;
 
@@ -572,6 +604,125 @@ public final class X509CertificateUtil {
     }
 
     return resolvedUser;
+  }
+
+  /**
+   * Resolves a single user by combining multiple claim values with AND semantics.
+   *
+   * <p>The primary claim is searched first (the always-present, most selective value); the
+   * resulting candidates are then narrowed by comparing each remaining claim against the expected
+   * value extracted from the certificate. The primary value and the secondary {@code claimURI ->
+   * expectedValue} filters are read from the {@link AuthenticationContext} (stashed by the
+   * authenticator). Only claim-based user-store APIs are used, so this works uniformly across
+   * JDBC and LDAP/AD user stores.
+   *
+   * @param primaryClaimUri the claim URI searched first
+   * @param tenantDomain the tenant domain
+   * @param context the authentication context holding the compound search spec
+   * @return the single resolved (domain-qualified) username, or {@code null} if none matched
+   * @throws AuthenticationFailedException if more than one user matches all filters (conflict) or
+   *     on user-store errors
+   */
+  @SuppressWarnings("unchecked")
+  private static String resolveByCompoundClaims(
+      final String primaryClaimUri,
+      final String tenantDomain,
+      final AuthenticationContext context)
+      throws AuthenticationFailedException {
+
+    final Object primaryValueObj =
+        context.getProperty(X509CertificateConstants.X509_COMPOUND_PRIMARY_VALUE_CONTEXT_PROPERTY);
+    final String primaryValue = primaryValueObj instanceof String ? (String) primaryValueObj : null;
+    if (StringUtils.isEmpty(primaryValue)) {
+      log.debug("Compound resolution: primary value is empty; cannot resolve");
+      return null;
+    }
+
+    final Object filtersObj =
+        context.getProperty(
+            X509CertificateConstants.X509_COMPOUND_SECONDARY_FILTERS_CONTEXT_PROPERTY);
+    final Map<String, String> secondaryFilters =
+        filtersObj instanceof Map ? (Map<String, String>) filtersObj : Collections.emptyMap();
+
+    final AbstractUserStoreManager userStoreManager =
+        (AbstractUserStoreManager) getRequiredUserStoreManager(tenantDomain);
+
+    try {
+      // Claim search maps the claim URI to the underlying attribute per user store and spans all
+      // user stores when no domain is embedded in the value.
+      final String[] candidates = userStoreManager.getUserList(primaryClaimUri, primaryValue, null);
+      if (candidates == null || candidates.length == 0) {
+        log.debug("Compound resolution: primary claim search returned no candidates");
+        return null;
+      }
+      log.debug(
+          "Compound resolution: primary claim search returned "
+              + candidates.length
+              + " candidate(s); applying "
+              + secondaryFilters.size()
+              + " secondary filter(s)");
+
+      if (secondaryFilters.isEmpty()) {
+        // Nothing to disambiguate with; behaves like a single-claim search.
+        if (candidates.length == 1) {
+          return candidates[0];
+        }
+        context.setProperty(
+            X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
+            X509CertificateConstants.USERNAME_CONFLICT);
+        throw new AuthenticationFailedException(
+            "Conflicting users found for the given identifier.");
+      }
+
+      final String[] secondaryClaimUris = secondaryFilters.keySet().toArray(new String[0]);
+      final List<String> matched = new ArrayList<>();
+      for (final String candidate : candidates) {
+        final Map<String, String> values =
+            userStoreManager.getUserClaimValues(candidate, secondaryClaimUris, null);
+        boolean allMatch = true;
+        for (final Map.Entry<String, String> filter : secondaryFilters.entrySet()) {
+          if (!claimValueMatches(filter.getValue(), values.get(filter.getKey()))) {
+            allMatch = false;
+            break;
+          }
+        }
+        if (allMatch) {
+          matched.add(candidate);
+        }
+      }
+
+      if (matched.isEmpty()) {
+        log.debug("Compound resolution: no candidate matched all secondary filters");
+        return null;
+      }
+      if (matched.size() > 1) {
+        context.setProperty(
+            X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY,
+            X509CertificateConstants.USERNAME_CONFLICT);
+        log.debug(
+            "Compound resolution: "
+                + matched.size()
+                + " candidates matched all filters (conflict)");
+        throw new AuthenticationFailedException(
+            "Conflicting users found for the given identifier.");
+      }
+
+      log.debug("Compound resolution: resolved to a single user");
+      return matched.get(0);
+    } catch (final UserStoreException e) {
+      throw new AuthenticationFailedException("Error while resolving user by compound claims", e);
+    }
+  }
+
+  /**
+   * Compares an expected claim value against a candidate user's value. {@code null} and empty are
+   * treated as equivalent (so an absent/empty attribute matches an empty expected value), and the
+   * comparison is trimmed and case-insensitive.
+   */
+  private static boolean claimValueMatches(final String expected, final String actual) {
+    final String e = expected == null ? "" : expected.trim();
+    final String a = actual == null ? "" : actual.trim();
+    return e.equalsIgnoreCase(a);
   }
 
   private static CertificateFactory getCertificateFactory() throws CertificateException {

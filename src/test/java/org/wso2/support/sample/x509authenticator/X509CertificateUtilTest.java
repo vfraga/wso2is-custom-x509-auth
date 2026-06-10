@@ -3,6 +3,7 @@ package org.wso2.support.sample.x509authenticator;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.powermock.api.mockito.PowerMockito.mock;
 import static org.powermock.api.mockito.PowerMockito.mockStatic;
 import static org.powermock.api.mockito.PowerMockito.when;
@@ -266,5 +267,132 @@ public class X509CertificateUtilTest {
         domain,
         "SECONDARY",
         "Domain should be resolved from the user store if not present in identifier");
+  }
+
+  private static final String PRIMARY_CLAIM = "http://wso2.org/claims/employeeNumber";
+  private static final String SECONDARY_CLAIM = "http://wso2.org/claims/region";
+
+  private void setupCompoundContext(
+      AuthenticationContext context, String primaryValue, String expectedSecondaryValue) {
+    context.setProperty(
+        X509CertificateConstants.X509_COMPOUND_PRIMARY_CLAIM_URI_CONTEXT_PROPERTY, PRIMARY_CLAIM);
+    context.setProperty(
+        X509CertificateConstants.X509_COMPOUND_PRIMARY_VALUE_CONTEXT_PROPERTY, primaryValue);
+    Map<String, String> filters = new HashMap<>();
+    filters.put(SECONDARY_CLAIM, expectedSecondaryValue);
+    context.setProperty(
+        X509CertificateConstants.X509_COMPOUND_SECONDARY_FILTERS_CONTEXT_PROPERTY, filters);
+  }
+
+  @Test
+  public void testCompoundResolutionDisambiguatesBySecondaryClaim() throws Exception {
+    AuthenticationContext context = new AuthenticationContext();
+    setupMocks(context, new HashMap<>());
+    setupCompoundContext(context, "ABC123XYZ", "IT");
+
+    AbstractUserStoreManager um =
+        (AbstractUserStoreManager)
+            ServiceHolder.getInstance().getRealmService().getTenantUserRealm(-1234)
+                .getUserStoreManager();
+
+    when(um.getUserList(PRIMARY_CLAIM, "ABC123XYZ", null))
+        .thenReturn(new String[] {"PRIMARY/userA", "SECONDARY/userB"});
+    Map<String, String> aVals = new HashMap<>();
+    aVals.put(SECONDARY_CLAIM, "IT");
+    Map<String, String> bVals = new HashMap<>();
+    bVals.put(SECONDARY_CLAIM, "FR");
+    when(um.getUserClaimValues(eq("PRIMARY/userA"), any(String[].class), any())).thenReturn(aVals);
+    when(um.getUserClaimValues(eq("SECONDARY/userB"), any(String[].class), any())).thenReturn(bVals);
+
+    String result =
+        X509CertificateUtil.getResolvedUsername("ABC123XYZ", context.getTenantDomain(), context);
+    assertEquals(
+        result, "PRIMARY/userA", "Should resolve to the single candidate matching all filters");
+  }
+
+  @Test
+  public void testCompoundResolutionEmptyValueMatchesAbsentAttribute() throws Exception {
+    AuthenticationContext context = new AuthenticationContext();
+    setupMocks(context, new HashMap<>());
+    // Expected secondary value is empty (e.g. an absent optional segment in the certificate).
+    setupCompoundContext(context, "ABC123XYZ", "");
+
+    AbstractUserStoreManager um =
+        (AbstractUserStoreManager)
+            ServiceHolder.getInstance().getRealmService().getTenantUserRealm(-1234)
+                .getUserStoreManager();
+
+    when(um.getUserList(PRIMARY_CLAIM, "ABC123XYZ", null))
+        .thenReturn(new String[] {"PRIMARY/userA", "SECONDARY/userB"});
+    // userA has no region attribute at all -> should match the empty expected value.
+    when(um.getUserClaimValues(eq("PRIMARY/userA"), any(String[].class), any()))
+        .thenReturn(new HashMap<>());
+    Map<String, String> bVals = new HashMap<>();
+    bVals.put(SECONDARY_CLAIM, "FR");
+    when(um.getUserClaimValues(eq("SECONDARY/userB"), any(String[].class), any())).thenReturn(bVals);
+
+    String result =
+        X509CertificateUtil.getResolvedUsername("ABC123XYZ", context.getTenantDomain(), context);
+    assertEquals(
+        result,
+        "PRIMARY/userA",
+        "An absent attribute should match an empty expected value (null-or-empty match)");
+  }
+
+  @Test
+  public void testCompoundResolutionConflictWhenMultipleMatchAllFilters() throws Exception {
+    AuthenticationContext context = new AuthenticationContext();
+    setupMocks(context, new HashMap<>());
+    setupCompoundContext(context, "ABC123XYZ", "IT");
+
+    AbstractUserStoreManager um =
+        (AbstractUserStoreManager)
+            ServiceHolder.getInstance().getRealmService().getTenantUserRealm(-1234)
+                .getUserStoreManager();
+
+    when(um.getUserList(PRIMARY_CLAIM, "ABC123XYZ", null))
+        .thenReturn(new String[] {"PRIMARY/userA", "SECONDARY/userB"});
+    Map<String, String> sameRegion = new HashMap<>();
+    sameRegion.put(SECONDARY_CLAIM, "IT");
+    when(um.getUserClaimValues(eq("PRIMARY/userA"), any(String[].class), any()))
+        .thenReturn(sameRegion);
+    when(um.getUserClaimValues(eq("SECONDARY/userB"), any(String[].class), any()))
+        .thenReturn(sameRegion);
+
+    try {
+      X509CertificateUtil.getResolvedUsername("ABC123XYZ", context.getTenantDomain(), context);
+      fail("Expected AuthenticationFailedException when more than one user matches all filters");
+    } catch (AuthenticationFailedException e) {
+      assertEquals(
+          context.getProperty(
+              X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY),
+          X509CertificateConstants.USERNAME_CONFLICT);
+    }
+  }
+
+  @Test
+  public void testCompoundResolutionNotFoundWhenNoCandidateMatches() throws Exception {
+    AuthenticationContext context = new AuthenticationContext();
+    setupMocks(context, new HashMap<>());
+    setupCompoundContext(context, "ABC123XYZ", "IT");
+
+    AbstractUserStoreManager um =
+        (AbstractUserStoreManager)
+            ServiceHolder.getInstance().getRealmService().getTenantUserRealm(-1234)
+                .getUserStoreManager();
+
+    when(um.getUserList(PRIMARY_CLAIM, "ABC123XYZ", null))
+        .thenReturn(new String[] {"PRIMARY/userA"});
+    Map<String, String> otherRegion = new HashMap<>();
+    otherRegion.put(SECONDARY_CLAIM, "FR");
+    when(um.getUserClaimValues(eq("PRIMARY/userA"), any(String[].class), any()))
+        .thenReturn(otherRegion);
+
+    String result =
+        X509CertificateUtil.getResolvedUsername("ABC123XYZ", context.getTenantDomain(), context);
+    assertNull(result, "Should not resolve when no candidate matches the secondary filter");
+    assertEquals(
+        context.getProperty(X509CertificateConstants.X509_CERTIFICATE_ERROR_CODE_CONTEXT_PROPERTY),
+        X509CertificateConstants.USER_NOT_FOUND_ERROR_CODE);
   }
 }
